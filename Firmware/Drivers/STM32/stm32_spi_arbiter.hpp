@@ -83,7 +83,8 @@ public:
      * HAL_SPI_RxCpltCallback and HAL_SPI_TxRxCpltCallback.
      */
     void on_complete();
-
+    
+    void abort();
 private:
     bool start();
     

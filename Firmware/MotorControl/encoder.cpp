@@ -60,7 +60,7 @@ void Encoder::setup() {
     if(mode_ & MODE_FLAG_ABS){
         abs_spi_cs_pin_init();
 
-        if (axis_->controller_.config_.anticogging.pre_calibrated) {
+        if ((axis_->controller_.config_.anticogging.pre_calibrated) && (config_.gear_ratio==1.0f)) {
             axis_->controller_.anticogging_valid_ = true;
         }
     }
@@ -423,7 +423,7 @@ bool Encoder::run_offset_calibration() {
     }
 
     // Check CPR
-    float elec_rad_per_enc = axis_->motor_.config_.pole_pairs * 2 * M_PI * (1.0f / (float)(config_.cpr));
+    float elec_rad_per_enc = axis_->motor_.config_.pole_pairs * 2 * M_PI * (1.0f / ((float)(config_.cpr)*config_.gear_ratio));
     float expected_encoder_delta = config_.calib_scan_distance / elec_rad_per_enc;
     calib_scan_response_ = std::abs(shadow_count_ - init_enc_val);
     if (std::abs(calib_scan_response_ - expected_encoder_delta) / expected_encoder_delta > config_.calib_range) {
@@ -495,7 +495,7 @@ void Encoder::sample_now() {
         case MODE_SPI_ABS_RLS:
         case MODE_SPI_ABS_MA732:
         {
-            abs_spi_start_transaction();
+            spi_true_fail_ = abs_spi_start_transaction();
             // Do nothing
         } break;
 
@@ -538,6 +538,7 @@ bool Encoder::abs_spi_start_transaction() {
             
             spi_arbiter_->transfer_async(&spi_task_);
         } else {
+            if (spi_error_rate_ > 0.025f){spi_arbiter_->abort();}
             return false;
         }
     }
@@ -569,8 +570,9 @@ void Encoder::abs_spi_cb(bool success) {
     switch (mode_) {
         case MODE_SPI_ABS_AMS: {
             uint16_t rawVal = abs_spi_dma_rx_[0];
+            spi_last_=rawVal;
             // check if parity is correct (even) and error flag clear
-            if (ams_parity(rawVal) || ((rawVal >> 14) & 1)) {
+            if (ams_parity(rawVal) /*|| ((rawVal >> 14) & 1)*/) {
                 goto done;
             }
             pos = rawVal & 0x3fff;
@@ -746,7 +748,7 @@ bool Encoder::update() {
             }
 
             abs_spi_pos_updated_ = false;
-            delta_enc = pos_abs_latched - count_in_cpr_; //LATCH
+            delta_enc = pos_abs_latched - mod(count_in_cpr_,config_.cpr); //LATCH
             delta_enc = mod(delta_enc, config_.cpr);
             if (delta_enc > config_.cpr/2) {
                 delta_enc -= config_.cpr;
@@ -761,9 +763,9 @@ bool Encoder::update() {
 
     shadow_count_ += delta_enc;
     count_in_cpr_ += delta_enc;
-    count_in_cpr_ = mod(count_in_cpr_, config_.cpr);
+    count_in_cpr_ = mod(count_in_cpr_, (int)(((float)config_.cpr)*config_.gear_ratio));
 
-    if(mode_ & MODE_FLAG_ABS)
+    if((mode_ & MODE_FLAG_ABS) && (config_.gear_ratio == 1.0f))
         count_in_cpr_ = pos_abs_latched;
 
     // Memory for pos_circular
@@ -783,12 +785,12 @@ bool Encoder::update() {
     // discrete phase detector
     float delta_pos_counts = (float)(shadow_count_ - encoder_model(pos_estimate_counts_));
     float delta_pos_cpr_counts = (float)(count_in_cpr_ - encoder_model(pos_cpr_counts_));
-    delta_pos_cpr_counts = wrap_pm(delta_pos_cpr_counts, (float)(config_.cpr));
+    delta_pos_cpr_counts = wrap_pm(delta_pos_cpr_counts, (float)(config_.cpr)*config_.gear_ratio);
     delta_pos_cpr_counts_ += 0.1f * (delta_pos_cpr_counts - delta_pos_cpr_counts_); // for debug
     // pll feedback
     pos_estimate_counts_ += current_meas_period * pll_kp_ * delta_pos_counts;
     pos_cpr_counts_ += current_meas_period * pll_kp_ * delta_pos_cpr_counts;
-    pos_cpr_counts_ = fmodf_pos(pos_cpr_counts_, (float)(config_.cpr));
+    pos_cpr_counts_ = fmodf_pos(pos_cpr_counts_, (float)(config_.cpr)*config_.gear_ratio);
     vel_estimate_counts_ += current_meas_period * pll_ki_ * delta_pos_cpr_counts;
     bool snap_to_zero_vel = false;
     if (std::abs(vel_estimate_counts_) < 0.5f * current_meas_period * pll_ki_) {
@@ -797,14 +799,14 @@ bool Encoder::update() {
     }
 
     // Outputs from Encoder for Controller
-    pos_estimate_ = pos_estimate_counts_ / (float)config_.cpr;
-    vel_estimate_ = vel_estimate_counts_ / (float)config_.cpr;
+    pos_estimate_ = pos_estimate_counts_ / ((float)config_.cpr*config_.gear_ratio);
+    vel_estimate_ = vel_estimate_counts_ / ((float)config_.cpr*config_.gear_ratio);
     
     // TODO: we should strictly require that this value is from the previous iteration
     // to avoid spinout scenarios. However that requires a proper way to reset
     // the encoder from error states.
     float pos_circular = pos_circular_.any().value_or(0.0f);
-    pos_circular +=  wrap_pm((pos_cpr_counts_ - pos_cpr_counts_last) / (float)config_.cpr, 1.0f);
+    pos_circular +=  wrap_pm((pos_cpr_counts_ - pos_cpr_counts_last) / ((float)config_.cpr*config_.gear_ratio), 1.0f);
     pos_circular = fmodf_pos(pos_circular, axis_->controller_.config_.circular_setpoint_range);
     pos_circular_ = pos_circular;
 
@@ -830,7 +832,7 @@ bool Encoder::update() {
 
     //// compute electrical phase
     //TODO avoid recomputing elec_rad_per_enc every time
-    float elec_rad_per_enc = axis_->motor_.config_.pole_pairs * 2 * M_PI * (1.0f / (float)(config_.cpr));
+    float elec_rad_per_enc = axis_->motor_.config_.pole_pairs * 2 * M_PI * (1.0f / (float)(config_.cpr*config_.gear_ratio));
     float ph = elec_rad_per_enc * (interpolated_enc - config_.phase_offset_float);
     
     if (is_ready_) {

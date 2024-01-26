@@ -24,6 +24,7 @@ public:
         float bandwidth = 1000.0f;
         int32_t phase_offset = 0;        // Offset between encoder count and rotor electrical phase
         float phase_offset_float = 0.0f; // Sub-count phase alignment offset
+        float gear_ratio=1.0f;
         int32_t cpr = (2048 * 4);   // Default resolution of CUI-AMT102 encoder,
         float index_offset = 0.0f;
         bool use_index = false;
@@ -110,6 +111,8 @@ public:
     float calib_scan_response_ = 0.0f; // debug report from offset calib
     int32_t pos_abs_ = 0;
     float spi_error_rate_ = 0.0f;
+    uint16_t spi_last_ = 0;
+    bool spi_true_fail_ =false;
 
     OutputPort<float> pos_estimate_ = 0.0f; // [turn]
     OutputPort<float> vel_estimate_ = 0.0f; // [turn/s]

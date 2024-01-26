@@ -127,3 +127,26 @@ void Stm32SpiArbiter::on_complete() {
         start();
     }
 }
+
+void Stm32SpiArbiter::abort() {
+    HAL_SPI_Abort(hspi_);//stop com
+    
+    if (!task_list_) {
+        return; // this should not happen
+    }
+
+    // Wrap up transfer
+    task_list_->ncs_gpio.write(true);
+    if (task_list_->on_complete) {
+        (*task_list_->on_complete)(task_list_->on_complete_ctx, false);
+    }
+
+    // Start next task if any
+    SpiTask* next = nullptr;
+    CRITICAL_SECTION() {
+        next = task_list_ = task_list_->next;
+    }
+    if (next) {
+        start();
+    }
+}

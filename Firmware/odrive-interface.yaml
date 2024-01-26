@@ -1295,6 +1295,8 @@ interfaces:
         type: int32
         doc: The last (valid) position from an absolute encoder, if used.
       spi_error_rate: readonly float32
+      spi_last: readonly uint16
+      spi_true_fail: readonly bool
       config:
         c_is_class: False
         attributes:
@@ -1321,6 +1323,7 @@ interfaces:
             doc: Counts per Revolution of the encoder.  This is 4x the Pulses per Revolution.
           phase_offset: int32
           phase_offset_float: float32
+          gear_ratio: float32
           direction: int32
           pre_calibrated: {type: bool, c_setter: set_pre_calibrated}
           enable_phase_interpolation: bool
