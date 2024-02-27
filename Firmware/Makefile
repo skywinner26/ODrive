@@ -64,7 +64,7 @@ clean:
 	-rm -fR .dep $(BUILD_DIR)
 
 flash-stlink2: all
-	$(OPENOCD) \
+	sudo $(OPENOCD) \
 		-c 'reset halt' \
 		-c 'flash write_image erase $(FIRMWARE)' \
 		-c 'reset run' \
@@ -99,11 +99,19 @@ gdb-bmp: all
 dfu: all
 	python ../tools/odrivetool $(if $(value SERIAL_NUMBER),--serial-number $(SERIAL_NUMBER),) dfu $(FIRMWARE_HEX)
 
+fflash: 
+		$(OPENOCD) \
+		-c 'reset halt' \
+		-c 'flash write_image erase $(FIRMWARE)' \
+		-c 'reset run' \
+		-c exit
+
 flash: flash-stlink2
 gdb: gdb-stlink2
 erase: erase-stlink2
 unlock: unlock-stlink2
 
+
 .PHONY: stlink2-config flash-stlink2 gdb-stlink2 erase-stlink2 unlock-stlink2
 .PHONY: flash-bmp gdb-bmp
-.PHONY: all clean flash gdb erase unlock dfu fibre
+.PHONY: all clean flash gdb erase unlock dfu fibre fflash

@@ -78,6 +78,13 @@ void Stm32SpiArbiter::transfer_async(SpiTask* task) {
             if (task->on_complete) {
                 (*task->on_complete)(task->on_complete_ctx, false);
             }
+            SpiTask* next = nullptr;
+             CRITICAL_SECTION() {
+                next = task_list_ = task_list_->next;
+            }
+            if (next) {
+                start();
+            }
         }
     }
 }
@@ -145,8 +152,11 @@ void Stm32SpiArbiter::abort() {
     SpiTask* next = nullptr;
     CRITICAL_SECTION() {
         next = task_list_ = task_list_->next;
+        task_list_ = task_list_->next;
     }
+    
     if (next) {
         start();
     }
+    
 }

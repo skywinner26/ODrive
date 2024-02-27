@@ -538,7 +538,7 @@ bool Encoder::abs_spi_start_transaction() {
             
             spi_arbiter_->transfer_async(&spi_task_);
         } else {
-            if (spi_error_rate_ > 0.025f){spi_arbiter_->abort();}
+            if (spi_error_rate_ > 0.1f){spi_arbiter_->abort();}
             return false;
         }
     }
@@ -738,7 +738,7 @@ bool Encoder::update() {
             if (abs_spi_pos_updated_ == false) {
                 // Low pass filter the error
                 spi_error_rate_ += current_meas_period * (1.0f - spi_error_rate_);
-                if (spi_error_rate_ > 0.05f) {
+                if (spi_error_rate_ > 0.2f) {
                     set_error(ERROR_ABS_SPI_COM_FAIL);
                     return false;
                 }
